@@ -16,7 +16,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
-	golang.org/x/sys v0.0.0-20210616094352-59db8d763f22
+	golang.org/x/sys v0.1.0
 	google.golang.org/grpc v1.34.0
 	k8s.io/apimachinery v0.22.5
 	k8s.io/mount-utils v0.22.5
