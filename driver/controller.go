@@ -93,7 +93,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("volume capabilities cannot be satisified: %s", strings.Join(violations, "; ")))
 	}
 
-	size, err := extractStorage(req.CapacityRange)
+	size, err := d.extractStorage(req.CapacityRange)
 	if err != nil {
 		return nil, status.Errorf(codes.OutOfRange, "invalid capacity range: %v", err)
 	}
@@ -181,20 +181,13 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		volumeReq.SnapshotID = snapshotID
 	}
 
-	log.Info("checking volume limit")
-	details, err := d.checkLimit(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to check volume limit: %s", err)
-	}
-	if details != nil {
-		return nil, status.Errorf(codes.ResourceExhausted,
-			"volume limit (%d) has been reached. Current number of volumes: %d. Please contact support.",
-			details.limit, details.numVolumes)
-	}
-
 	log.WithField("volume_req", volumeReq).Info("creating volume")
-	vol, _, err := d.storage.CreateVolume(ctx, volumeReq)
+	vol, cvResp, err := d.storage.CreateVolume(ctx, volumeReq)
 	if err != nil {
+		if cvResp != nil && cvResp.StatusCode == http.StatusForbidden && strings.Contains(err.Error(), "capacity limit exceeded") {
+			return nil, status.Errorf(codes.ResourceExhausted, "volume limit has been reached. Please contact support")
+		}
+
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -373,9 +366,10 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	}
 
 	if action != nil {
+		log = logWithAction(log, action)
 		log.Info("waiting until volume is attached")
 		if err := d.waitAction(ctx, log, req.VolumeId, action.ID); err != nil {
-			return nil, err
+			return nil, status.Errorf(codes.Internal, "failed waiting on action ID %d for volume ID %s to get attached: %s", action.ID, req.VolumeId, err)
 		}
 	}
 
@@ -461,9 +455,10 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	}
 
 	if action != nil {
+		log = logWithAction(log, action)
 		log.Info("waiting until volume is detached")
 		if err := d.waitAction(ctx, log, req.VolumeId, action.ID); err != nil {
-			return nil, err
+			return nil, status.Errorf(codes.Internal, "failed waiting on action ID %d for volume ID %s to get detached: %s", action.ID, req.VolumeId, err)
 		}
 	}
 
@@ -871,7 +866,7 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 		return nil, status.Errorf(codes.Internal, "ControllerExpandVolume could not retrieve existing volume: %v", err)
 	}
 
-	resizeBytes, err := extractStorage(req.GetCapacityRange())
+	resizeBytes, err := d.extractStorage(req.GetCapacityRange())
 	if err != nil {
 		return nil, status.Errorf(codes.OutOfRange, "ControllerExpandVolume invalid capacity range: %v", err)
 	}
@@ -902,9 +897,10 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 	log = log.WithField("new_volume_size", resizeGigaBytes)
 
 	if action != nil {
+		log = logWithAction(log, action)
 		log.Info("waiting until volume is resized")
 		if err := d.waitAction(ctx, log, req.VolumeId, action.ID); err != nil {
-			return nil, status.Errorf(codes.Internal, "failed waiting for volume to get resized: %s", err)
+			return nil, status.Errorf(codes.Internal, "failed waiting on action ID %d for volume ID %s to get resized: %s", action.ID, req.VolumeId, err)
 		}
 	}
 
@@ -931,9 +927,9 @@ func (d *Driver) ControllerGetVolume(ctx context.Context, req *csi.ControllerGet
 
 // extractStorage extracts the storage size in bytes from the given capacity
 // range. If the capacity range is not satisfied it returns the default volume
-// size. If the capacity range is below or above supported sizes, it returns an
-// error.
-func extractStorage(capRange *csi.CapacityRange) (int64, error) {
+// size. If the capacity range is above supported sizes, it returns an
+// error. If the capacity range is below supported size, it returns the minimum supported size
+func (d *Driver) extractStorage(capRange *csi.CapacityRange) (int64, error) {
 	if capRange == nil {
 		return defaultVolumeSizeInBytes, nil
 	}
@@ -952,7 +948,11 @@ func extractStorage(capRange *csi.CapacityRange) (int64, error) {
 	}
 
 	if requiredSet && !limitSet && requiredBytes < minimumVolumeSizeInBytes {
-		return 0, fmt.Errorf("required (%v) can not be less than minimum supported volume size (%v)", formatBytes(requiredBytes), formatBytes(minimumVolumeSizeInBytes))
+		d.log.WithFields(logrus.Fields{
+			"required_bytes":      formatBytes(requiredBytes),
+			"minimum_volume_size": formatBytes(minimumVolumeSizeInBytes),
+		}).Warn("requiredBytes is less than minimum volume size, setting requiredBytes default to minimumVolumeSizeBytes")
+		return minimumVolumeSizeInBytes, nil
 	}
 
 	if limitSet && limitBytes < minimumVolumeSizeInBytes {
@@ -1008,13 +1008,9 @@ func formatBytes(inputBytes int64) string {
 	return result + unit
 }
 
-// waitAction waits until the given action for the volume is completed
+// waitAction waits until the given action for the volume has completed.
 func (d *Driver) waitAction(ctx context.Context, log *logrus.Entry, volumeID string, actionID int) error {
-	log = log.WithFields(logrus.Fields{
-		"action_id": actionID,
-	})
-
-	err := wait.PollUntil(1*time.Second, wait.ConditionFunc(func() (done bool, err error) {
+	err := wait.PollUntil(1*time.Second, func() (done bool, err error) {
 		action, _, err := d.storageActions.Get(ctx, volumeID, actionID)
 		if err != nil {
 			ctxCanceled := ctx.Err() != nil
@@ -1025,18 +1021,27 @@ func (d *Driver) waitAction(ctx context.Context, log *logrus.Entry, volumeID str
 
 			return false, fmt.Errorf("failed to get action %d for volume %s: %s", actionID, volumeID, err)
 		}
-
-		log.WithField("action_status", action.Status).Info("action received")
+		log = log.WithField("action_status", action.Status)
 
 		if action.Status == godo.ActionCompleted {
 			log.Info("action completed")
 			return true, nil
 		}
 
+		log.Info("action is still pending")
 		return false, nil
-	}), ctx.Done())
+	}, ctx.Done())
 
 	return err
+}
+
+// logWithAction returns a log with action-specific fields populated.
+func logWithAction(log *logrus.Entry, action *godo.Action) *logrus.Entry {
+	log = log.WithField("action_id", action.ID)
+	if action.StartedAt != nil {
+		log = log.WithField("action_start_time", action.StartedAt.Time)
+	}
+	return log
 }
 
 type limitDetails struct {

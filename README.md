@@ -80,7 +80,7 @@ Version 1 of the CSI driver supports v1alpha1 Volume Snapshots only.
 
 Version 2 and 3 of the CSI driver supports v1beta1 Volume Snapshots only.
 
-Version 4 and later of the CSI driver supports v1 Volume Snapshots, which is backwards compatible to v1beta1. However, version 3 renders snapshots unusable that had previously been marked as invalid. See the [csi-snapshotter](https://github.com/kubernetes-csi/external-snapshotter) documentation on the validating webhook and v1beta1 to v1 upgrade notes.
+Version 4 and later of the CSI driver support v1 Volume Snapshots only, which is backwards compatible to v1beta1. However, version 3 renders snapshots unusable that had previously been marked as invalid. See the [csi-snapshotter](https://github.com/kubernetes-csi/external-snapshotter) documentation on the validating webhook and v1beta1 to v1 upgrade notes.
 
 ---
 
@@ -100,12 +100,16 @@ Volumes can be transferred across clusters. The exact steps are outlined in [our
 
 The following table describes the required DigitalOcean CSI driver version per supported Kubernetes release.
 
-Kubernetes Release | DigitalOcean CSI Driver Version
------------------- | -------------------------------
-1.19               | v3
-1.20               | v3
-1.21               | v3
-1.22               | v4
+| Kubernetes Release | DigitalOcean CSI Driver Version |
+|--------------------|---------------------------------|
+| 1.19               | v3                              |
+| 1.20               | v3                              |
+| 1.21               | v3                              |
+| 1.22               | v4                              |
+| 1.23               | v4.2.0+                         |
+| 1.24               | v4.3.0+                         |
+| 1.25               | v4.4.0+                         |
+| 1.26               | v4.5.0+                         |
 
 ---
 **Note:**
@@ -198,6 +202,8 @@ where `vX.Y.Z` is the plugin target version. (Note that for releases older than 
 If you see any issues during the installation, this could be because the newly
 created CRDs haven't been established yet. If you call `kubectl apply -f` again
 on the same file, the missing resources will be applied again.
+
+The above does not include the snapshot validating webhook which needs extra configuration as outlined above. You may append `,snapshot-validation-webhook.yaml` to the `{...}` list if you want to install a (presumably configured) webhook as well. 
 
 #### 4. Test and verify
 
@@ -299,6 +305,20 @@ For that reason, the default page size can be customized by passing the `--defau
 2. The configured sidecar timeout values may need to be aligned with the chosen page size. In particular, csi-attacher invokes `ListVolumes` to periodically synchronize the API and cluster-local volume states; as such, its timeout must be large enough to account for the expected number of volumes in the given account and region.   
 3. The default page size does not become effective if an explicit page size (more precisely, _max entries_ in CSI spec speak) is passed to a given gRPC method.
 
+### API rate limiting
+
+DO API usage is subject to [certain rate limits](https://docs.digitalocean.com/reference/api/api-reference/#section/Introduction/Rate-Limit). In order to protect against running out of quota for extremely heavy regular usage or pathological cases (e.g., bugs or API thrashing due to an interfering third-party controller), a custom rate limit can be configured via the `--do-api-rate-limit` flag. It accepts a float value, e.g., `--do-api-rate-limit=3.5` to restrict API usage to 3.5 queries per second.
+
+### Flags
+
+| Name                  | Description                                                                          | Default |
+|-----------------------|--------------------------------------------------------------------------------------|---------|
+| --validate-attachment | Validate if the attachment has fully completed before formatting/mounting the device | false   |
+
+The `--validate-attachment` options adds an additional validation which checks for the `/sys/class/block/<device name>/device/state`
+file content for the `running` status. When enabling this flag, it prevents a racing condition where the DOBS volumes aren't 
+fully attached which can be misinterpreted by the CSI implementation causing a force format of the volume which results in data loss. 
+
 ---
 
 ## Development
@@ -354,7 +374,19 @@ There is a set of custom integration tests which are mostly useful for Kubernete
 
 To run the integration tests on a DOKS cluster, follow [the instructions](test/kubernetes/deploy/README.md).
 
-## Updating the Kubernetes dependencies
+## Prepare CSI driver for a new Kubernetes minor version
+
+1. Review recently merged PRs and any in-progress / planned work to ensure any bugs scheduled for the release have been fixed and merged.
+2. [Bump kubernetes dependency versions](#updating-the-kubernetes-dependencies)
+3. [Support running e2e on new $MAJOR.$MINOR](test/e2e/README.md#add-support-for-a-new-kubernetes-release)
+   1. Since we only support three minor versions at a time. E2e tests for the oldest supported version can be removed.
+4. Verify [e2e tests pass](.github/workflows/test.yaml) - see [here](#end-to-end-tests) about running tests locally
+5. Prepare for [release](#releasing)
+6. Perform [release](.github/workflows/release.yaml)
+
+> See [e2e test README](test/e2e/README.md) on how to run conformance tests locally.
+
+### Updating the Kubernetes dependencies
 
 Run
 
@@ -364,9 +396,13 @@ make NEW_KUBERNETES_VERSION=X.Y.Z update-k8s
 
 to update the Kubernetes dependencies to version X.Y.Z.
 
-## Releasing
+> Note: Make sure to also add support to the e2e tests for the new kubernetes version, following [these instructions](test/e2e/README.md#add-support-for-a-new-kubernetes-release).
 
-To release a new version `vX.Y.Z`, first bump the version:
+### Releasing
+
+Releases may happen either for the latest minor version of the CSI driver maintained in the `master` branch, or an older minor version still maintained in one of the `release-*` branches. In this section, we will call that branch the _release branch_.
+
+To release a new version `vX.Y.Z`, first check out the release branch and bump the version:
 
 ```shell
 make NEW_VERSION=vX.Y.Z bump-version
@@ -382,16 +418,18 @@ git add .
 git push origin
 ```
 
-After it is merged to master, wait for the master build to go green. (This will entail another run of the entire test suite.)
+After it is merged to the release branch, wait for the release branch build to go green. (This will entail another run of the entire test suite.)
 
-Finally, check out the master branch again, tag the release, and push it:
+Finally, check out the release branch again, tag the release, and push it:
 
 ```shell
-git checkout master
+git checkout <release branch>
 git pull
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
+
+(This works for non-master release branches as well since the `checkout` Github Action we use defaults to checking out the ref/SHA that triggered the workflow.)
 
 The CI will publish the container image `digitalocean/do-csi-plugin:vX.Y.Z` and create a Github Release under the name `vX.Y.Z` automatically. Nothing else needs to be done.
 

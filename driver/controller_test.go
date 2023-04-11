@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -181,11 +182,16 @@ func (*fakeTagsDriver) UntagResources(context.Context, string, *godo.UntagResour
 }
 
 func TestControllerExpandVolume(t *testing.T) {
+	defaultVolume := &godo.Volume{
+		ID:            "volume-id",
+		SizeGigaBytes: (defaultVolumeSizeInBytes / giB),
+	}
 	tcs := []struct {
-		name string
-		req  *csi.ControllerExpandVolumeRequest
-		resp *csi.ControllerExpandVolumeResponse
-		err  error
+		name   string
+		req    *csi.ControllerExpandVolumeRequest
+		resp   *csi.ControllerExpandVolumeResponse
+		err    error
+		volume *godo.Volume
 	}{
 		{
 			name: "request exceeds maximum supported size",
@@ -199,15 +205,19 @@ func TestControllerExpandVolume(t *testing.T) {
 			err:  status.Error(codes.OutOfRange, "ControllerExpandVolume invalid capacity range: required (20Ti) can not exceed maximum supported volume size (16Ti)"),
 		},
 		{
-			name: "requested size less than minimum supported size",
+			name: "requested size less than minimum supported size returns the default minimum volume size",
+			volume: &godo.Volume{
+				ID:            "volume-id",
+				SizeGigaBytes: 1,
+			},
 			req: &csi.ControllerExpandVolumeRequest{
 				VolumeId: "volume-id",
 				CapacityRange: &csi.CapacityRange{
 					RequiredBytes: 0.5 * giB,
 				},
 			},
-			resp: nil,
-			err:  status.Error(codes.OutOfRange, "ControllerExpandVolume invalid capacity range: required (512Mi) can not be less than minimum supported volume size (1Gi)"),
+			resp: &csi.ControllerExpandVolumeResponse{CapacityBytes: minimumVolumeSizeInBytes, NodeExpansionRequired: true},
+			err:  nil,
 		},
 		{
 			name: "volume for corresponding volume id does not exist",
@@ -245,20 +255,19 @@ func TestControllerExpandVolume(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			volume := &godo.Volume{
-				ID:            "volume-id",
-				SizeGigaBytes: (defaultVolumeSizeInBytes / giB),
+			if tc.volume == nil {
+				tc.volume = defaultVolume
 			}
 			driver := &Driver{
 				region: "foo",
 				storage: &fakeStorageDriver{
 					volumes: map[string]*godo.Volume{
-						"volume-id": volume,
+						"volume-id": tc.volume,
 					},
 				},
 				storageActions: &fakeStorageActionsDriver{
 					volumes: map[string]*godo.Volume{
-						"volume-id": volume,
+						"volume-id": tc.volume,
 					},
 				},
 				log: logrus.New().WithField("test_enabed", true),
@@ -268,7 +277,7 @@ func TestControllerExpandVolume(t *testing.T) {
 				assert.Equal(t, err, tc.err)
 			} else {
 				assert.Equal(t, tc.resp, resp)
-				assert.Equal(t, (volume.SizeGigaBytes * giB), resp.CapacityBytes)
+				assert.Equal(t, (tc.volume.SizeGigaBytes * giB), resp.CapacityBytes)
 			}
 
 		})
@@ -276,10 +285,16 @@ func TestControllerExpandVolume(t *testing.T) {
 }
 
 func TestCreateVolume(t *testing.T) {
+	snapshotId := "snapshotId"
+
 	tests := []struct {
-		name           string
-		listVolumesErr error
-		getSnapshotErr error
+		name                    string
+		listVolumesErr          error
+		getSnapshotErr          error
+		snapshots               map[string]*godo.Snapshot
+		wantErr                 error
+		createVolumeErr         error
+		createVolumeResponseErr *godo.Response
 	}{
 		{
 			name:           "listing volumes failing",
@@ -289,24 +304,75 @@ func TestCreateVolume(t *testing.T) {
 			name:           "fetching snapshot failing",
 			getSnapshotErr: errors.New("failed to get snapshot"),
 		},
+		{
+			name: "volume limit has been reached",
+			snapshots: map[string]*godo.Snapshot{
+				snapshotId: {
+					ID: snapshotId,
+				},
+			},
+			createVolumeErr: &godo.ErrorResponse{
+				Response: &http.Response{
+					Request: &http.Request{
+						Method: http.MethodPost,
+						URL:    &url.URL{},
+					},
+					StatusCode: http.StatusForbidden,
+				},
+				Message: "failed to create volume: volume/snapshot capacity limit exceeded",
+			},
+			createVolumeResponseErr: &godo.Response{
+				Response: &http.Response{
+					StatusCode: http.StatusForbidden,
+				},
+			},
+			wantErr: errors.New("volume limit has been reached. Please contact support"),
+		},
+		{
+			name: "error occurred when creating a volume",
+			snapshots: map[string]*godo.Snapshot{
+				snapshotId: {
+					ID: snapshotId,
+				},
+			},
+			createVolumeErr: &godo.ErrorResponse{
+				Response: &http.Response{
+					Request: &http.Request{
+						Method: http.MethodPost,
+						URL:    &url.URL{},
+					},
+					StatusCode: http.StatusInternalServerError,
+				},
+				Message: "internal server error",
+			},
+			createVolumeResponseErr: &godo.Response{
+				Response: &http.Response{
+					StatusCode: http.StatusInternalServerError,
+				},
+			},
+			wantErr: errors.New("internal server error"),
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			d := &Driver{
 				storage: &fakeStorageDriver{
-					listVolumesErr: test.listVolumesErr,
+					listVolumesErr:          test.listVolumesErr,
+					createVolumeErr:         test.createVolumeErr,
+					createVolumeErrResponse: test.createVolumeResponseErr,
 				},
 				snapshots: &fakeSnapshotsDriver{
 					getSnapshotErr: test.getSnapshotErr,
+					snapshots:      test.snapshots,
 				},
-				log: logrus.New().WithField("test_enabed", true),
+				log: logrus.New().WithField("test_enabled", true),
 			}
 
 			_, err := d.CreateVolume(context.Background(), &csi.CreateVolumeRequest{
 				Name: "name",
 				VolumeCapabilities: []*csi.VolumeCapability{
-					&csi.VolumeCapability{
+					{
 						AccessType: &csi.VolumeCapability_Mount{
 							Mount: &csi.VolumeCapability_MountVolume{},
 						},
@@ -330,6 +396,8 @@ func TestCreateVolume(t *testing.T) {
 				wantErr = test.listVolumesErr
 			case test.getSnapshotErr != nil:
 				wantErr = test.getSnapshotErr
+			case test.createVolumeErr != nil:
+				wantErr = test.wantErr
 			}
 
 			if wantErr == nil && err != nil {

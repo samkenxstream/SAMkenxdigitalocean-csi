@@ -14,7 +14,8 @@
 
 NAME=do-csi-plugin
 OS ?= linux
-GO_VERSION := 1.17.7
+# Get Go version from go.mod file.
+GO_VERSION := $(shell go mod edit -print | grep -E '^go [[:digit:].]*' | cut -d' ' -f2)
 ifeq ($(strip $(shell git status --porcelain 2>/dev/null)),)
   GIT_TREE_STATE=clean
 else
@@ -28,7 +29,7 @@ ifneq ($(VERSION),)
 else
   VERSION ?= $(shell cat VERSION)
 endif
-KUBERNETES_VERSION ?= 1.19.2
+KUBERNETES_VERSION ?= 1.26.0
 DOCKER_REPO ?= digitalocean/do-csi-plugin
 CANONICAL_RUNNER_IMAGE = digitalocean/k8s-e2e-test-runner
 RUNNER_IMAGE ?= $(CANONICAL_RUNNER_IMAGE)
@@ -69,7 +70,11 @@ bump-version:
 .PHONY: compile
 compile:
 	@echo "==> Building the project"
-	@docker run --rm -e GOOS=${OS} -e GOARCH=amd64 -v ${PWD}/:/app -w /app golang:${GO_VERSION}-alpine sh -c 'apk add git && go build -mod=vendor -o cmd/do-csi-plugin/${NAME} -ldflags "$(LDFLAGS)" ${PKG}'
+	# Do not embed VCS data as this seems to fail in the Alpine container. This
+	# should be fine for now given we manually inject build information.
+	# TODO(timoreimann): move away from custom build information injection in
+	# favor of Go native's one.
+	@docker run --rm -e GOOS=${OS} -e GOARCH=amd64 -v ${PWD}/:/app -w /app golang:${GO_VERSION}-alpine sh -c 'apk add git && go build -buildvcs=false -mod=vendor -o cmd/do-csi-plugin/${NAME} -ldflags "$(LDFLAGS)" ${PKG}'
 
 .PHONY: check-unused
 check-unused: vendor
@@ -94,7 +99,7 @@ build:
 push:
 # Permit releasing to the canonical container repository only if VERSION adheres to semver.
 ifeq ($(DOCKER_REPO),digitalocean/do-csi-plugin)
-	@echo "${VERSION}" | grep -Eq "^v[0-9]+\.[0-9]+\.[0-9]+$$" || ( echo "VERSION \"${VERSION}\" does not adhere to semver"; exit 1 )
+	@echo "${VERSION}" | grep -Eq "^v[0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:]]+)?$$" || ( echo "VERSION \"${VERSION}\" does not adhere to semver"; exit 1 )
 endif
 	@echo "==> Publishing $(DOCKER_REPO):$(VERSION)"
 	@docker push $(DOCKER_REPO):$(VERSION)
@@ -125,14 +130,14 @@ runner-build:
 	@echo "pulling cache images"
 	@docker pull $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)builder || true
 	@docker pull $(CANONICAL_RUNNER_IMAGE):builder || true
-	@docker pull $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.22 || true
-	@docker pull $(CANONICAL_RUNNER_IMAGE):tests-1.22 || true
-	@docker pull $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.21 || true
-	@docker pull $(CANONICAL_RUNNER_IMAGE):tests-1.21 || true
-	@docker pull $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.20 || true
-	@docker pull $(CANONICAL_RUNNER_IMAGE):tests-1.20 || true
-	@docker pull $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.19 || true
-	@docker pull $(CANONICAL_RUNNER_IMAGE):tests-1.19 || true
+	@docker pull $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.26 || true
+	@docker pull $(CANONICAL_RUNNER_IMAGE):tests-1.26 || true
+	@docker pull $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.25 || true
+	@docker pull $(CANONICAL_RUNNER_IMAGE):tests-1.25 || true
+	@docker pull $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.24 || true
+	@docker pull $(CANONICAL_RUNNER_IMAGE):tests-1.24 || true
+	@docker pull $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.23 || true
+	@docker pull $(CANONICAL_RUNNER_IMAGE):tests-1.23 || true
 	@docker pull $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tools || true
 	@docker pull $(CANONICAL_RUNNER_IMAGE):tools || true
 	@docker pull $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)runtime || true
@@ -146,62 +151,62 @@ runner-build:
 		--cache-from $(CANONICAL_RUNNER_IMAGE):builder \
 		-t $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)builder -f test/e2e/Dockerfile test/e2e
 
-	@echo "building target tests-1.22"
-	@docker build --target tests-1.22 \
+	@echo "building target tests-1.26"
+	@docker build --target tests-1.26 \
 		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)builder \
 		--cache-from $(CANONICAL_RUNNER_IMAGE):builder \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.22 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.22 \
-		-t $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.22 -f test/e2e/Dockerfile test/e2e
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.26 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.26 \
+		-t $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.26 -f test/e2e/Dockerfile test/e2e
 
-	@echo "building target tests-1.21"
-	@docker build --target tests-1.21 \
+	@echo "building target tests-1.25"
+	@docker build --target tests-1.25 \
 		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)builder \
 		--cache-from $(CANONICAL_RUNNER_IMAGE):builder \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.22 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.22 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.21 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.21 \
-		-t $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.21 -f test/e2e/Dockerfile test/e2e
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.26 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.26 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.25 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.25 \
+		-t $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.25 -f test/e2e/Dockerfile test/e2e
 
-	@echo "building target tests-1.20"
-	@docker build --target tests-1.20 \
+	@echo "building target tests-1.24"
+	@docker build --target tests-1.24 \
 		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)builder \
 		--cache-from $(CANONICAL_RUNNER_IMAGE):builder \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.22 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.22 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.21 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.21 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.20 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.20 \
-		-t $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.20 -f test/e2e/Dockerfile test/e2e
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.26 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.26 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.25 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.25 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.24 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.24 \
+		-t $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.24 -f test/e2e/Dockerfile test/e2e
 
-	@echo "building target tests-1.19"
-	@docker build --target tests-1.19 \
+	@echo "building target tests-1.23"
+	@docker build --target tests-1.23 \
 		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)builder \
 		--cache-from $(CANONICAL_RUNNER_IMAGE):builder \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.22 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.22 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.21 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.21 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.20 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.20 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.19 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.19 \
-		-t $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.19 -f test/e2e/Dockerfile test/e2e
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.26 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.26 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.25 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.25 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.24 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.24 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.23 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.23 \
+		-t $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.23 -f test/e2e/Dockerfile test/e2e
 
 	@echo "building target tools"
 	@docker build --target tools \
 		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)builder \
 		--cache-from $(CANONICAL_RUNNER_IMAGE):builder \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.22 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.22 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.21 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.21 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.20 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.20 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.19 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.19 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.26 \
+        --cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.26 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.25 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.25 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.24 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.24 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.23 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.23 \
 		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tools \
 		--cache-from $(CANONICAL_RUNNER_IMAGE):tools \
 		-t $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tools -f test/e2e/Dockerfile test/e2e
@@ -210,14 +215,14 @@ runner-build:
 	@docker build --target runtime \
 		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)builder \
 		--cache-from $(CANONICAL_RUNNER_IMAGE):builder \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.22 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.22 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.21 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.21 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.20 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.20 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.19 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.19 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.26 \
+        --cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.26 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.25 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.25 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.24 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.24 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.23 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.23 \
 		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tools \
 		--cache-from $(CANONICAL_RUNNER_IMAGE):tools \
 		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)runtime \
@@ -228,14 +233,14 @@ runner-build:
 	@docker build \
 		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)builder \
 		--cache-from $(CANONICAL_RUNNER_IMAGE):builder \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.22 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.22 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.21 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.21 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.20 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.20 \
-		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.19 \
-		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.19 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.26 \
+        --cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.26 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.25 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.25 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.24 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.24 \
+		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.23 \
+		--cache-from $(CANONICAL_RUNNER_IMAGE):tests-1.23 \
 		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tools \
 		--cache-from $(CANONICAL_RUNNER_IMAGE):tools \
 		--cache-from $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)runtime \
@@ -246,10 +251,10 @@ runner-build:
 
 runner-push: runner-build
 	@docker push $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)builder
-	@docker push $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.22
-	@docker push $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.21
-	@docker push $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.20
-	@docker push $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.19
+	@docker push $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.26
+	@docker push $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.25
+	@docker push $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.24
+	@docker push $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tests-1.23
 	@docker push $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)tools
 	@docker push $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)runtime
 	@docker push $(RUNNER_IMAGE):$(RUNNER_IMAGE_TAG_PREFIX)latest

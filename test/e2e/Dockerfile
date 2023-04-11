@@ -20,62 +20,58 @@ RUN apt-get update && \
 RUN mkdir -p /go/src/k8s.io
 WORKDIR /go/src/k8s.io
 
-### Kubernetes 1.22
-FROM builder AS tests-1.22
-ARG KUBE_VERSION_1_22=1.22.5
-ARG KUBE_VERSION_1_22_E2E_BIN_SHA256_CHECKSUM=8665242697896acf544fee3e060ccdacc49ddac68adca083ce4de131c4a7e829
+### Kubernetes 1.26
+FROM builder AS tests-1.26
+ARG KUBE_VERSION_1_26=1.26.0
+ARG KUBE_VERSION_1_26_E2E_BIN_SHA256_CHECKSUM=6d337b8bd7789105e95682ff1ad7da8d3e8c6c40e8d85021ef72d4ae117f08a9
 
-RUN curl --fail --location https://dl.k8s.io/v${KUBE_VERSION_1_22}/kubernetes-test-linux-amd64.tar.gz | tar xvzf - --strip-components 3 kubernetes/test/bin/e2e.test
-RUN echo "${KUBE_VERSION_1_22_E2E_BIN_SHA256_CHECKSUM}" e2e.test | sha256sum --check
-RUN cp e2e.test /e2e.1.22.test
+RUN curl --fail --location https://dl.k8s.io/v${KUBE_VERSION_1_26}/kubernetes-test-linux-amd64.tar.gz | tar xvzf - --strip-components 3 kubernetes/test/bin/e2e.test kubernetes/test/bin/ginkgo
+RUN echo "${KUBE_VERSION_1_26_E2E_BIN_SHA256_CHECKSUM}" e2e.test | sha256sum --check
+RUN cp e2e.test /e2e.1.26.test
+RUN cp ginkgo /ginkgo-1.26
 
-### Kubernetes 1.21
-FROM builder AS tests-1.21
-ARG KUBE_VERSION_1_21=1.21.6
-ARG KUBE_VERSION_1_21_E2E_BIN_SHA256_CHECKSUM=74db305a069c82a7cf874c483a1d4ef163ae061bb259cdaea3047066b21c2a6c
+### Kubernetes 1.25
+FROM builder AS tests-1.25
+ARG KUBE_VERSION_1_25=1.25.2
+ARG KUBE_VERSION_1_25_E2E_BIN_SHA256_CHECKSUM=b9ec7494abed4d5d40f4027e4211da0a2b33f76f81f6813430a9ebd142ca83a0
 
-RUN curl --fail --location https://dl.k8s.io/v${KUBE_VERSION_1_21}/kubernetes-test-linux-amd64.tar.gz | tar xvzf - --strip-components 3 kubernetes/test/bin/e2e.test
-RUN echo "${KUBE_VERSION_1_21_E2E_BIN_SHA256_CHECKSUM}" e2e.test | sha256sum --check
-RUN cp e2e.test /e2e.1.21.test
+RUN curl --fail --location https://dl.k8s.io/v${KUBE_VERSION_1_25}/kubernetes-test-linux-amd64.tar.gz | tar xvzf - --strip-components 3 kubernetes/test/bin/e2e.test kubernetes/test/bin/ginkgo
+RUN echo "${KUBE_VERSION_1_25_E2E_BIN_SHA256_CHECKSUM}" e2e.test | sha256sum --check
+RUN cp e2e.test /e2e.1.25.test
+RUN cp ginkgo /ginkgo-1.25
 
-### Kubernetes 1.20
-FROM builder AS tests-1.20
-ARG KUBE_VERSION_1_20=1.20.12
-ARG KUBE_VERSION_1_20_E2E_BIN_SHA256_CHECKSUM=8b5a1bc13f3978d8f17c3d13f64a1e678cf764aea22d8500e05f8c99fb57f6d9
+### Kubernetes 1.24
+FROM builder AS tests-1.24
+ARG KUBE_VERSION_1_24=1.24.3
+ARG KUBE_VERSION_1_24_E2E_BIN_SHA256_CHECKSUM=94139dbaaf944c762be269bfe6ed389029722d8d19b88e6d10c6730dbf6a98b2
 
-RUN curl --fail --location https://dl.k8s.io/v${KUBE_VERSION_1_20}/kubernetes-test-linux-amd64.tar.gz | tar xvzf - --strip-components 3 kubernetes/test/bin/e2e.test
-RUN echo "${KUBE_VERSION_1_20_E2E_BIN_SHA256_CHECKSUM}" e2e.test | sha256sum --check
-RUN cp e2e.test /e2e.1.20.test
+RUN curl --fail --location https://dl.k8s.io/v${KUBE_VERSION_1_24}/kubernetes-test-linux-amd64.tar.gz | tar xvzf - --strip-components 3 kubernetes/test/bin/e2e.test kubernetes/test/bin/ginkgo
+RUN echo "${KUBE_VERSION_1_24_E2E_BIN_SHA256_CHECKSUM}" e2e.test | sha256sum --check
+RUN cp e2e.test /e2e.1.24.test
+RUN cp ginkgo /ginkgo-1.24
 
-### Kubernetes 1.19
-FROM builder AS tests-1.19
-ARG KUBE_VERSION_1_19=1.19.16
-ARG KUBE_VERSION_1_19_E2E_BIN_SHA256_CHECKSUM=441f61ffe66d5a1bca4d71b0fa38b31bece1275f95c2a0b07e5b786e408b0ee0
+### Kubernetes 1.23
+FROM builder AS tests-1.23
+ARG KUBE_VERSION_1_23=1.23.7
+ARG KUBE_VERSION_1_23_E2E_BIN_SHA256_CHECKSUM=e1a9a632b7715d4bfbac3322da5d32072eaf544b31a81a6c3df205d0dc0e96b7
 
-RUN curl --fail --location https://dl.k8s.io/v${KUBE_VERSION_1_19}/kubernetes-test-linux-amd64.tar.gz | tar xvzf - --strip-components 3 kubernetes/test/bin/e2e.test
-RUN echo "${KUBE_VERSION_1_19_E2E_BIN_SHA256_CHECKSUM}" e2e.test | sha256sum --check
-RUN cp e2e.test /e2e.1.19.test
+RUN curl --fail --location https://dl.k8s.io/v${KUBE_VERSION_1_23}/kubernetes-test-linux-amd64.tar.gz | tar xvzf - --strip-components 3 kubernetes/test/bin/e2e.test kubernetes/test/bin/ginkgo
+RUN echo "${KUBE_VERSION_1_23_E2E_BIN_SHA256_CHECKSUM}" e2e.test | sha256sum --check
+RUN cp e2e.test /e2e.1.23.test
+RUN cp ginkgo /ginkgo-1.23
 
-### ginkgo and tools
-FROM golang:1.13 AS tools
+FROM golang:1.19 AS tools
 # See comment at the bottom on why we need tini.
 ARG TINI_VERSION=0.18.0
 # doctl is needed to support clusters that had their kubeconfig fetched via the
 # CLI because those leverage a kubeconfig authentication plugin based on doctl.
-ARG DOCTL_VERSION=1.36.0
-# ginkgo is needed to run the upstream end-to-end tests.
-ARG GINKGO_VERSION=1.10.3
-# kubectl is needed by some tests.
-ARG KUBECTL_VERSION=1.22.5
+ARG DOCTL_VERSION=1.76.2
 
 RUN curl --fail --location --output /tini https://github.com/krallin/tini/releases/download/v${TINI_VERSION}/tini
 RUN chmod u+x /tini
 
 RUN curl --fail --location https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-amd64.tar.gz | tar -xzv
 RUN cp doctl /
-
-RUN GO111MODULE=on go get github.com/onsi/ginkgo/ginkgo@v${GINKGO_VERSION}
-RUN cp bin/ginkgo /
 
 RUN curl --fail --location --remote-name https://storage.googleapis.com/kubernetes-release/release/$(curl --fail --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
 RUN chmod u+x kubectl
@@ -86,13 +82,16 @@ FROM bitnami/minideb:buster AS runtime
 # Certificates needed to trust the CA for any HTTPS connections to the DO API.
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends ca-certificates
-COPY --from=tests-1.22 /e2e.1.22.test /
-COPY --from=tests-1.21 /e2e.1.21.test /
-COPY --from=tests-1.20 /e2e.1.20.test /
-COPY --from=tests-1.19 /e2e.1.19.test /
+COPY --from=tests-1.26 /e2e.1.26.test /
+COPY --from=tests-1.26 /ginkgo-1.26 /usr/local/bin
+COPY --from=tests-1.25 /e2e.1.25.test /
+COPY --from=tests-1.25 /ginkgo-1.25 /usr/local/bin
+COPY --from=tests-1.24 /e2e.1.24.test /
+COPY --from=tests-1.24 /ginkgo-1.24 /usr/local/bin
+COPY --from=tests-1.23 /e2e.1.23.test /
+COPY --from=tests-1.23 /ginkgo-1.23 /usr/local/bin
 COPY --from=tools /tini /sbin/
 COPY --from=tools /doctl /usr/local/bin/
-COPY --from=tools /ginkgo /usr/local/bin/
 COPY --from=tools /kubectl /usr/local/bin/
 
 COPY cleanup-clusters.sh /

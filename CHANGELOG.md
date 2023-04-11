@@ -1,5 +1,62 @@
 ## unreleased
 
+## v4.5.1 - 2023.03.21
+
+* Validate CreateVolume limits with forbidden error response
+  [[GH-481]](https://github.com/digitalocean/csi-digitalocean/pull/481)
+* CSI driver can accidentally format existing volume
+  [[GH-478]](https://github.com/digitalocean/csi-digitalocean/pull/478)
+
+## v4.5.0 - 2023.01.11
+
+* Update CSI driver for Kubernetes 1.26
+  [[GH-469]](https://github.com/digitalocean/csi-digitalocean/pull/469)
+* Update CSI sidecars to latest
+  [[GH-474]](https://github.com/digitalocean/csi-digitalocean/pull/474)
+
+## v4.4.1 - 2022.11.04
+
+* Update CSI sidecars to latest
+  [[GH-465]](https://github.com/digitalocean/csi-digitalocean/pull/465)
+
+## v4.4.0 - 2022.11.02
+
+* Update CSI driver for Kubernetes 1.25
+  [[GH-461]](https://github.com/digitalocean/csi-digitalocean/pull/461)
+* Support setting DO API rate limit
+  [[GH-462]](https://github.com/digitalocean/csi-digitalocean/pull/462)
+* Upgrade Go to 1.19
+  [[GH-463]](https://github.com/digitalocean/csi-digitalocean/pull/463)
+
+## v4.3.0 - 2022.08.24
+
+* Update CSI driver for Kubernetes 1.24
+  [[GH-457]](https://github.com/digitalocean/csi-digitalocean/pull/457)
+
+## v4.2.0 - 2022.07.13
+
+* Add retain and XFS storage classes
+* [[GH-450]](https://github.com/digitalocean/csi-digitalocean/pull/450)
+* Upgrade sidecars and add RBAC rules for snapshot validation webhook
+  [[GH-444]](https://github.com/digitalocean/csi-digitalocean/pull/444)
+* Set storage size to minimum volume size
+  [[GH-441]](https://github.com/digitalocean/csi-digitalocean/pull/441)
+* Update CSI driver for Kubernetes 1.23
+  [[GH-440]](https://github.com/digitalocean/csi-digitalocean/pull/440)
+
+## v4.1.0 - 2022.06.21
+
+* Guarantee that action IDs are logged
+  [[GH-433]](https://github.com/digitalocean/csi-digitalocean/pull/433)
+* Make volumes page size customizable
+  [[GH-431]](https://github.com/digitalocean/csi-digitalocean/pull/431)
+* Upgrade sidecars
+  [[GH-432]](https://github.com/digitalocean/csi-digitalocean/pull/432)
+* Remove unnecessary waitActionTimeout
+  [[GH-429]](https://github.com/digitalocean/csi-digitalocean/pull/429)
+* Update to use Go 1.17.7
+  [[GH-426]](https://github.com/digitalocean/csi-digitalocean/pull/426)
+
 ## v4.0.0 - 2022.02.07
 
 * Update Kubernetes dependency to 1.22.5 and add support for 1.22 e2e tests

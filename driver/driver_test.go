@@ -155,9 +155,11 @@ func (f *fakeAccountDriver) Get(context.Context) (*godo.Account, *godo.Response,
 }
 
 type fakeStorageDriver struct {
-	volumes        map[string]*godo.Volume
-	snapshots      map[string]*godo.Snapshot
-	listVolumesErr error
+	volumes                 map[string]*godo.Volume
+	snapshots               map[string]*godo.Snapshot
+	listVolumesErr          error
+	createVolumeErr         error
+	createVolumeErrResponse *godo.Response
 }
 
 func (f *fakeStorageDriver) ListVolumes(ctx context.Context, param *godo.ListVolumeParams) ([]godo.Volume, *godo.Response, error) {
@@ -213,6 +215,10 @@ func (f *fakeStorageDriver) GetVolume(ctx context.Context, id string) (*godo.Vol
 }
 
 func (f *fakeStorageDriver) CreateVolume(ctx context.Context, req *godo.VolumeCreateRequest) (*godo.Volume, *godo.Response, error) {
+	if f.createVolumeErr != nil || f.createVolumeErrResponse != nil {
+		return nil, f.createVolumeErrResponse, f.createVolumeErr
+	}
+
 	id := randString(10)
 	vol := &godo.Volume{
 		ID:            id,
@@ -378,6 +384,10 @@ func (f *fakeDropletsDriver) List(context.Context, *godo.ListOptions) ([]godo.Dr
 	panic("not implemented")
 }
 
+func (f *fakeDropletsDriver) ListByName(context.Context, string, *godo.ListOptions) ([]godo.Droplet, *godo.Response, error) {
+	panic("not implemented")
+}
+
 func (f *fakeDropletsDriver) ListByTag(context.Context, string, *godo.ListOptions) ([]godo.Droplet, *godo.Response, error) {
 	panic("not implemented")
 }
@@ -533,6 +543,10 @@ func (f *fakeMounter) GetDeviceName(_ mount.Interface, mountPath string) (string
 	}
 
 	return "", nil
+}
+
+func (f *fakeMounter) IsAttached(source string) error {
+	return nil
 }
 
 func (f *fakeMounter) IsFormatted(source string) (bool, error) {
