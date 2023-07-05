@@ -10,14 +10,14 @@ require (
 	github.com/docker/docker v20.10.24+incompatible
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.9
-	github.com/google/uuid v1.2.0
+	github.com/google/uuid v1.3.0
 	github.com/kubernetes-csi/csi-test/v4 v4.3.0
 	github.com/magiconair/properties v1.8.5
 	github.com/sirupsen/logrus v1.8.1
-	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
+	golang.org/x/oauth2 v0.4.0
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	golang.org/x/sys v0.5.0
-	google.golang.org/grpc v1.49.0
+	google.golang.org/grpc v1.53.0
 	gotest.tools/v3 v3.4.0
 	k8s.io/apimachinery v0.26.0
 	k8s.io/mount-utils v0.23.7
@@ -46,7 +46,7 @@ require (
 	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20220502173005-c8bf987b8c21 // indirect
+	google.golang.org/genproto v0.0.0-20230110181048-76db0878b65f // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
